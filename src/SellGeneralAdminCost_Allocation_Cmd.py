@@ -2253,6 +2253,37 @@ def create_pj_summary(
     if objSingleRows is None or objCumulativeRows is None:
         return
 
+    objSummaryTargetColumns: List[str] = [
+        "科目名",
+        "純売上高",
+        "売上原価",
+        "売上総利益",
+        "配賦販管費",
+        "1Cカンパニー販管費",
+        "2Cカンパニー販管費",
+        "3Cカンパニー販管費",
+        "4Cカンパニー販管費",
+        "事業開発カンパニー販管費",
+    ]
+    objSingleSummaryRows: List[List[str]] = filter_rows_by_columns(
+        objSingleRows,
+        objSummaryTargetColumns,
+    )
+    objCumulativeSummaryRows: List[List[str]] = filter_rows_by_columns(
+        objCumulativeRows,
+        objSummaryTargetColumns,
+    )
+    pszSingleSummaryPath: str = os.path.join(
+        pszDirectory,
+        f"0004_PJサマリ_step0001_単月_損益計算書_{iEndYear}年{pszEndMonth}月.tsv",
+    )
+    pszCumulativeSummaryPath: str = os.path.join(
+        pszDirectory,
+        f"0004_PJサマリ_step0001_累計_損益計算書_{iEndYear}年{pszEndMonth}月.tsv",
+    )
+    write_tsv_rows(pszSingleSummaryPath, objSingleSummaryRows)
+    write_tsv_rows(pszCumulativeSummaryPath, objCumulativeSummaryRows)
+
     objSingleOutputRows: List[List[str]] = []
     for objRow in objSingleRows:
         pszName: str = objRow[0] if objRow else ""
