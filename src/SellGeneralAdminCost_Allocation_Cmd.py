@@ -1761,6 +1761,152 @@ def filter_rows_by_columns(
     return objFilteredRows
 
 
+def combine_company_sg_admin_columns(
+    objRows: List[List[str]],
+) -> List[List[str]]:
+    if not objRows:
+        return []
+    objHeader: List[str] = objRows[0]
+    objCompanyColumns: List[str] = [
+        "1Cカンパニー販管費",
+        "2Cカンパニー販管費",
+        "3Cカンパニー販管費",
+        "4Cカンパニー販管費",
+        "事業開発カンパニー販管費",
+    ]
+    objCompanyIndices: List[int] = [
+        find_column_index(objHeader, pszColumn) for pszColumn in objCompanyColumns
+    ]
+    objCompanyIndexSet = {iIndex for iIndex in objCompanyIndices if iIndex >= 0}
+    iAllocationIndex: int = find_column_index(objHeader, "配賦販管費")
+    objOutputRows: List[List[str]] = []
+    for iRowIndex, objRow in enumerate(objRows):
+        if iRowIndex == 0:
+            objOutputRow: List[str] = []
+            bInserted: bool = False
+            for iColumnIndex, pszValue in enumerate(objHeader):
+                if iColumnIndex == iAllocationIndex:
+                    objOutputRow.append("カンパニー販管費")
+                    bInserted = True
+                if iColumnIndex in objCompanyIndexSet:
+                    continue
+                objOutputRow.append(pszValue)
+            if not bInserted:
+                objOutputRow.append("カンパニー販管費")
+            objOutputRows.append(objOutputRow)
+            continue
+
+        fCompanyTotal: float = 0.0
+        for iColumnIndex in objCompanyIndices:
+            if 0 <= iColumnIndex < len(objRow):
+                fCompanyTotal += parse_number(objRow[iColumnIndex])
+        pszCompanyTotal: str = format_number(fCompanyTotal)
+
+        objOutputRow = []
+        bInserted = False
+        for iColumnIndex, pszValue in enumerate(objRow):
+            if iColumnIndex == iAllocationIndex:
+                objOutputRow.append(pszCompanyTotal)
+                bInserted = True
+            if iColumnIndex in objCompanyIndexSet:
+                continue
+            objOutputRow.append(pszValue)
+        if not bInserted:
+            objOutputRow.append(pszCompanyTotal)
+        objOutputRows.append(objOutputRow)
+
+    return objOutputRows
+
+
+def load_org_table_company_map(pszOrgTablePath: str) -> Dict[str, str]:
+    objCompanyMap: Dict[str, str] = {}
+    if not os.path.isfile(pszOrgTablePath):
+        return objCompanyMap
+
+    objRows = read_tsv_rows(pszOrgTablePath)
+    if not objRows:
+        return objCompanyMap
+
+    objHeader = objRows[0]
+    iCodeIndex = find_column_index(objHeader, "PJコード")
+    objCompanyColumnCandidates = ["計上カンパニー名", "計上カンパニー"]
+    iCompanyIndex = -1
+    for pszColumn in objCompanyColumnCandidates:
+        iCompanyIndex = find_column_index(objHeader, pszColumn)
+        if iCompanyIndex >= 0:
+            break
+
+    iStartIndex = 0
+    if iCodeIndex >= 0:
+        if iCompanyIndex < 0:
+            iCompanyIndex = iCodeIndex + 1
+        iStartIndex = 1
+    else:
+        iCodeIndex = 2
+        iCompanyIndex = 3
+
+    for objRow in objRows[iStartIndex:]:
+        if iCodeIndex >= len(objRow) or iCompanyIndex >= len(objRow):
+            continue
+        pszProjectCode: str = objRow[iCodeIndex].strip()
+        pszCompanyName: str = objRow[iCompanyIndex].strip()
+        if not pszProjectCode:
+            continue
+
+        objMatch = re.match(r"^(P\d{5}_|[A-OQ-Z]\d{3}_)", pszProjectCode)
+        if objMatch is None:
+            objMatch = re.match(r"^(P\d{5}|[A-OQ-Z]\d{3})", pszProjectCode)
+        if objMatch is None:
+            continue
+        pszPrefix: str = objMatch.group(1)
+        if not pszPrefix.endswith("_"):
+            pszPrefix += "_"
+        if pszPrefix not in objCompanyMap:
+            objCompanyMap[pszPrefix] = pszCompanyName
+
+    return objCompanyMap
+
+
+def build_step0003_rows(
+    objRows: List[List[str]],
+    objCompanyMap: Dict[str, str],
+) -> List[List[str]]:
+    if not objRows:
+        return []
+    objRemovalTargets = {
+        "C001_1Cカンパニー販管費",
+        "C002_2Cカンパニー販管費",
+        "C003_3Cカンパニー販管費",
+        "C004_4Cカンパニー販管費",
+        "C005_事業開発カンパニー販管費",
+        "C006_社長室カンパニー販管費",
+        "C007_本部カンパニー販管費",
+    }
+    iStartIndex = -1
+    for iRowIndex, objRow in enumerate(objRows):
+        pszName = objRow[0].strip() if objRow else ""
+        if pszName == "本部":
+            iStartIndex = iRowIndex
+            break
+
+    objOutputRows: List[List[str]] = []
+    for iRowIndex, objRow in enumerate(objRows):
+        if objRow and objRow[0].strip() in objRemovalTargets:
+            continue
+
+        pszCompanyName = ""
+        if iRowIndex >= 2 and iStartIndex >= 0 and iRowIndex >= iStartIndex:
+            pszProjectName = objRow[0].strip() if objRow else ""
+            objMatch = re.match(r"^(P\d{5}_|[A-OQ-Z]\d{3}_)", pszProjectName)
+            if objMatch is not None:
+                pszPrefix = objMatch.group(1)
+                pszCompanyName = objCompanyMap.get(pszPrefix, "")
+
+        objOutputRows.append([pszCompanyName] + (objRow[1:] if len(objRow) > 1 else []))
+
+    return objOutputRows
+
+
 def filter_rows_by_names(
     objRows: List[List[str]],
     objTargetNames: List[str],
@@ -2252,6 +2398,75 @@ def create_pj_summary(
 
     if objSingleRows is None or objCumulativeRows is None:
         return
+
+    objSummaryTargetColumns: List[str] = [
+        "科目名",
+        "純売上高",
+        "売上原価",
+        "売上総利益",
+        "配賦販管費",
+        "1Cカンパニー販管費",
+        "2Cカンパニー販管費",
+        "3Cカンパニー販管費",
+        "4Cカンパニー販管費",
+        "事業開発カンパニー販管費",
+    ]
+    objSingleSummaryRows: List[List[str]] = filter_rows_by_columns(
+        objSingleRows,
+        objSummaryTargetColumns,
+    )
+    objCumulativeSummaryRows: List[List[str]] = filter_rows_by_columns(
+        objCumulativeRows,
+        objSummaryTargetColumns,
+    )
+    pszSingleSummaryPath: str = os.path.join(
+        pszDirectory,
+        f"0004_PJサマリ_step0001_単月_損益計算書_{iEndYear}年{pszEndMonth}月.tsv",
+    )
+    pszCumulativeSummaryPath: str = os.path.join(
+        pszDirectory,
+        f"0004_PJサマリ_step0001_累計_損益計算書_{iEndYear}年{pszEndMonth}月.tsv",
+    )
+    write_tsv_rows(pszSingleSummaryPath, objSingleSummaryRows)
+    write_tsv_rows(pszCumulativeSummaryPath, objCumulativeSummaryRows)
+
+    objSingleStep0002Rows = combine_company_sg_admin_columns(
+        read_tsv_rows(pszSingleSummaryPath)
+    )
+    objCumulativeStep0002Rows = combine_company_sg_admin_columns(
+        read_tsv_rows(pszCumulativeSummaryPath)
+    )
+    pszSingleStep0002Path: str = os.path.join(
+        pszDirectory,
+        f"0004_PJサマリ_step0002_単月_損益計算書_{iEndYear}年{pszEndMonth}月.tsv",
+    )
+    pszCumulativeStep0002Path: str = os.path.join(
+        pszDirectory,
+        f"0004_PJサマリ_step0002_累計_損益計算書_{iEndYear}年{pszEndMonth}月.tsv",
+    )
+    write_tsv_rows(pszSingleStep0002Path, objSingleStep0002Rows)
+    write_tsv_rows(pszCumulativeStep0002Path, objCumulativeStep0002Rows)
+
+    pszOrgTablePath: str = os.path.join(pszDirectory, "管轄PJ表.tsv")
+    objCompanyMap = load_org_table_company_map(pszOrgTablePath)
+    objSingleStep0003Rows = build_step0003_rows(
+        read_tsv_rows(pszSingleStep0002Path),
+        objCompanyMap,
+    )
+    objCumulativeStep0003Rows = build_step0003_rows(
+        read_tsv_rows(pszCumulativeStep0002Path),
+        objCompanyMap,
+    )
+    pszSingleStep0003Path: str = os.path.join(
+        pszDirectory,
+        f"0004_PJサマリ_step0003_単月_損益計算書_{iEndYear}年{pszEndMonth}月.tsv",
+    )
+    pszCumulativeStep0003Path: str = os.path.join(
+        pszDirectory,
+        f"0004_PJサマリ_step0003_累計_損益計算書_{iEndYear}年{pszEndMonth}月.tsv",
+    )
+    write_tsv_rows(pszSingleStep0003Path, objSingleStep0003Rows)
+    write_tsv_rows(pszCumulativeStep0003Path, objCumulativeStep0003Rows)
 
     objSingleOutputRows: List[List[str]] = []
     for objRow in objSingleRows:
