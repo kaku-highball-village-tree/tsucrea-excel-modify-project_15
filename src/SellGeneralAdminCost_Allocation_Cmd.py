@@ -1818,6 +1818,95 @@ def combine_company_sg_admin_columns(
     return objOutputRows
 
 
+def load_org_table_company_map(pszOrgTablePath: str) -> Dict[str, str]:
+    objCompanyMap: Dict[str, str] = {}
+    if not os.path.isfile(pszOrgTablePath):
+        return objCompanyMap
+
+    objRows = read_tsv_rows(pszOrgTablePath)
+    if not objRows:
+        return objCompanyMap
+
+    objHeader = objRows[0]
+    iCodeIndex = find_column_index(objHeader, "PJコード")
+    objCompanyColumnCandidates = ["計上カンパニー名", "計上カンパニー"]
+    iCompanyIndex = -1
+    for pszColumn in objCompanyColumnCandidates:
+        iCompanyIndex = find_column_index(objHeader, pszColumn)
+        if iCompanyIndex >= 0:
+            break
+
+    iStartIndex = 0
+    if iCodeIndex >= 0:
+        if iCompanyIndex < 0:
+            iCompanyIndex = iCodeIndex + 1
+        iStartIndex = 1
+    else:
+        iCodeIndex = 2
+        iCompanyIndex = 3
+
+    for objRow in objRows[iStartIndex:]:
+        if iCodeIndex >= len(objRow) or iCompanyIndex >= len(objRow):
+            continue
+        pszProjectCode: str = objRow[iCodeIndex].strip()
+        pszCompanyName: str = objRow[iCompanyIndex].strip()
+        if not pszProjectCode:
+            continue
+
+        objMatch = re.match(r"^(P\d{5}_|[A-OQ-Z]\d{3}_)", pszProjectCode)
+        if objMatch is None:
+            objMatch = re.match(r"^(P\d{5}|[A-OQ-Z]\d{3})", pszProjectCode)
+        if objMatch is None:
+            continue
+        pszPrefix: str = objMatch.group(1)
+        if not pszPrefix.endswith("_"):
+            pszPrefix += "_"
+        if pszPrefix not in objCompanyMap:
+            objCompanyMap[pszPrefix] = pszCompanyName
+
+    return objCompanyMap
+
+
+def build_step0003_rows(
+    objRows: List[List[str]],
+    objCompanyMap: Dict[str, str],
+) -> List[List[str]]:
+    if not objRows:
+        return []
+    objRemovalTargets = {
+        "C001_1Cカンパニー販管費",
+        "C002_2Cカンパニー販管費",
+        "C003_3Cカンパニー販管費",
+        "C004_4Cカンパニー販管費",
+        "C005_事業開発カンパニー販管費",
+        "C006_社長室カンパニー販管費",
+        "C007_本部カンパニー販管費",
+    }
+    iStartIndex = -1
+    for iRowIndex, objRow in enumerate(objRows):
+        pszName = objRow[0].strip() if objRow else ""
+        if pszName == "本部":
+            iStartIndex = iRowIndex
+            break
+
+    objOutputRows: List[List[str]] = []
+    for iRowIndex, objRow in enumerate(objRows):
+        if objRow and objRow[0].strip() in objRemovalTargets:
+            continue
+
+        pszCompanyName = ""
+        if iRowIndex >= 2 and iStartIndex >= 0 and iRowIndex >= iStartIndex:
+            pszProjectName = objRow[0].strip() if objRow else ""
+            objMatch = re.match(r"^(P\d{5}_|[A-OQ-Z]\d{3}_)", pszProjectName)
+            if objMatch is not None:
+                pszPrefix = objMatch.group(1)
+                pszCompanyName = objCompanyMap.get(pszPrefix, "")
+
+        objOutputRows.append([pszCompanyName] + (objRow[1:] if len(objRow) > 1 else []))
+
+    return objOutputRows
+
+
 def filter_rows_by_names(
     objRows: List[List[str]],
     objTargetNames: List[str],
@@ -2357,6 +2446,27 @@ def create_pj_summary(
     )
     write_tsv_rows(pszSingleStep0002Path, objSingleStep0002Rows)
     write_tsv_rows(pszCumulativeStep0002Path, objCumulativeStep0002Rows)
+
+    pszOrgTablePath: str = os.path.join(pszDirectory, "管轄PJ表.tsv")
+    objCompanyMap = load_org_table_company_map(pszOrgTablePath)
+    objSingleStep0003Rows = build_step0003_rows(
+        read_tsv_rows(pszSingleStep0002Path),
+        objCompanyMap,
+    )
+    objCumulativeStep0003Rows = build_step0003_rows(
+        read_tsv_rows(pszCumulativeStep0002Path),
+        objCompanyMap,
+    )
+    pszSingleStep0003Path: str = os.path.join(
+        pszDirectory,
+        f"0004_PJサマリ_step0003_単月_損益計算書_{iEndYear}年{pszEndMonth}月.tsv",
+    )
+    pszCumulativeStep0003Path: str = os.path.join(
+        pszDirectory,
+        f"0004_PJサマリ_step0003_累計_損益計算書_{iEndYear}年{pszEndMonth}月.tsv",
+    )
+    write_tsv_rows(pszSingleStep0003Path, objSingleStep0003Rows)
+    write_tsv_rows(pszCumulativeStep0003Path, objCumulativeStep0003Rows)
 
     objSingleOutputRows: List[List[str]] = []
     for objRow in objSingleRows:
