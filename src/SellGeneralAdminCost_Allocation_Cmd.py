@@ -1894,13 +1894,16 @@ def build_step0003_rows(
         if objRow and objRow[0].strip() in objRemovalTargets:
             continue
 
-        pszCompanyName = ""
+        pszCompanyName = objRow[0].strip() if iRowIndex < 2 and objRow else ""
         if iRowIndex >= 2 and iStartIndex >= 0 and iRowIndex >= iStartIndex:
             pszProjectName = objRow[0].strip() if objRow else ""
-            objMatch = re.match(r"^(P\d{5}_|[A-OQ-Z]\d{3}_)", pszProjectName)
-            if objMatch is not None:
-                pszPrefix = objMatch.group(1)
-                pszCompanyName = objCompanyMap.get(pszPrefix, "")
+            if pszProjectName == "本部":
+                pszCompanyName = "本部"
+            else:
+                objMatch = re.match(r"^(P\d{5}_|[A-OQ-Z]\d{3}_)", pszProjectName)
+                if objMatch is not None:
+                    pszPrefix = objMatch.group(1)
+                    pszCompanyName = objCompanyMap.get(pszPrefix, "")
 
         objOutputRows.append([pszCompanyName] + (objRow[1:] if len(objRow) > 1 else []))
 
