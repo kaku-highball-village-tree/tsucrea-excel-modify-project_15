@@ -1761,6 +1761,63 @@ def filter_rows_by_columns(
     return objFilteredRows
 
 
+def combine_company_sg_admin_columns(
+    objRows: List[List[str]],
+) -> List[List[str]]:
+    if not objRows:
+        return []
+    objHeader: List[str] = objRows[0]
+    objCompanyColumns: List[str] = [
+        "1Cカンパニー販管費",
+        "2Cカンパニー販管費",
+        "3Cカンパニー販管費",
+        "4Cカンパニー販管費",
+        "事業開発カンパニー販管費",
+    ]
+    objCompanyIndices: List[int] = [
+        find_column_index(objHeader, pszColumn) for pszColumn in objCompanyColumns
+    ]
+    objCompanyIndexSet = {iIndex for iIndex in objCompanyIndices if iIndex >= 0}
+    iAllocationIndex: int = find_column_index(objHeader, "配賦販管費")
+    objOutputRows: List[List[str]] = []
+    for iRowIndex, objRow in enumerate(objRows):
+        if iRowIndex == 0:
+            objOutputRow: List[str] = []
+            bInserted: bool = False
+            for iColumnIndex, pszValue in enumerate(objHeader):
+                if iColumnIndex == iAllocationIndex:
+                    objOutputRow.append("カンパニー販管費")
+                    bInserted = True
+                if iColumnIndex in objCompanyIndexSet:
+                    continue
+                objOutputRow.append(pszValue)
+            if not bInserted:
+                objOutputRow.append("カンパニー販管費")
+            objOutputRows.append(objOutputRow)
+            continue
+
+        fCompanyTotal: float = 0.0
+        for iColumnIndex in objCompanyIndices:
+            if 0 <= iColumnIndex < len(objRow):
+                fCompanyTotal += parse_number(objRow[iColumnIndex])
+        pszCompanyTotal: str = format_number(fCompanyTotal)
+
+        objOutputRow = []
+        bInserted = False
+        for iColumnIndex, pszValue in enumerate(objRow):
+            if iColumnIndex == iAllocationIndex:
+                objOutputRow.append(pszCompanyTotal)
+                bInserted = True
+            if iColumnIndex in objCompanyIndexSet:
+                continue
+            objOutputRow.append(pszValue)
+        if not bInserted:
+            objOutputRow.append(pszCompanyTotal)
+        objOutputRows.append(objOutputRow)
+
+    return objOutputRows
+
+
 def filter_rows_by_names(
     objRows: List[List[str]],
     objTargetNames: List[str],
@@ -2283,6 +2340,23 @@ def create_pj_summary(
     )
     write_tsv_rows(pszSingleSummaryPath, objSingleSummaryRows)
     write_tsv_rows(pszCumulativeSummaryPath, objCumulativeSummaryRows)
+
+    objSingleStep0002Rows = combine_company_sg_admin_columns(
+        read_tsv_rows(pszSingleSummaryPath)
+    )
+    objCumulativeStep0002Rows = combine_company_sg_admin_columns(
+        read_tsv_rows(pszCumulativeSummaryPath)
+    )
+    pszSingleStep0002Path: str = os.path.join(
+        pszDirectory,
+        f"0004_PJサマリ_step0002_単月_損益計算書_{iEndYear}年{pszEndMonth}月.tsv",
+    )
+    pszCumulativeStep0002Path: str = os.path.join(
+        pszDirectory,
+        f"0004_PJサマリ_step0002_累計_損益計算書_{iEndYear}年{pszEndMonth}月.tsv",
+    )
+    write_tsv_rows(pszSingleStep0002Path, objSingleStep0002Rows)
+    write_tsv_rows(pszCumulativeStep0002Path, objCumulativeStep0002Rows)
 
     objSingleOutputRows: List[List[str]] = []
     for objRow in objSingleRows:
