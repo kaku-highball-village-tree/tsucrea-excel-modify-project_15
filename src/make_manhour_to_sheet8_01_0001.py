@@ -55,6 +55,253 @@ def write_debug_error(pszMessage: str, objBaseDirectoryPath: Path | None = None)
         objFile.write(pszMessage + "\n")
 
 
+def read_tsv_rows(pszPath: str) -> List[List[str]]:
+    objRows: List[List[str]] = []
+    if not os.path.isfile(pszPath):
+        return objRows
+    with open(pszPath, "r", encoding="utf-8", newline="") as objFile:
+        objReader = csv.reader(objFile, delimiter="\t")
+        for objRow in objReader:
+            objRows.append(list(objRow))
+    return objRows
+
+
+def write_tsv_rows(pszPath: str, objRows: List[List[str]]) -> None:
+    with open(pszPath, "w", encoding="utf-8", newline="") as objFile:
+        objWriter = csv.writer(objFile, delimiter="\t", lineterminator="\n")
+        for objRow in objRows:
+            objWriter.writerow(objRow)
+
+
+def parse_number(pszText: str) -> float:
+    pszValue: str = (pszText or "").strip()
+    if pszValue == "":
+        return 0.0
+    try:
+        return float(pszValue)
+    except ValueError:
+        return 0.0
+
+
+def format_number(fValue: float) -> str:
+    if abs(fValue - round(fValue)) < 0.0000001:
+        return str(int(round(fValue)))
+    pszText: str = f"{fValue:.6f}"
+    pszText = pszText.rstrip("0").rstrip(".")
+    return pszText
+
+
+def combine_company_sg_admin_columns(objRows: List[List[str]]) -> List[List[str]]:
+    if not objRows:
+        return []
+    objHeader = objRows[0]
+    iAllocationIndex: int = -1
+    iCompanyIndices: List[int] = []
+    for iIndex, pszValue in enumerate(objHeader):
+        if pszValue == "配賦販管費":
+            iAllocationIndex = iIndex
+        if pszValue in [
+            "1Cカンパニー販管費",
+            "2Cカンパニー販管費",
+            "3Cカンパニー販管費",
+            "4Cカンパニー販管費",
+            "事業開発カンパニー販管費",
+        ]:
+            iCompanyIndices.append(iIndex)
+    if iAllocationIndex < 0 or not iCompanyIndices:
+        return objRows
+
+    objOutputRows: List[List[str]] = []
+    objOutputRows.append(list(objHeader))
+    for objRow in objRows[1:]:
+        objNewRow: List[str] = list(objRow)
+        fTotal: float = 0.0
+        for iIndex in iCompanyIndices:
+            if iIndex < len(objRow):
+                fTotal += parse_number(objRow[iIndex])
+        if iAllocationIndex < len(objNewRow):
+            objNewRow[iAllocationIndex] = format_number(fTotal)
+        objOutputRows.append(objNewRow)
+    return objOutputRows
+
+
+def load_org_table_company_map(pszOrgTablePath: str) -> Dict[str, str]:
+    objCompanyMap: Dict[str, str] = {}
+    objRows = read_tsv_rows(pszOrgTablePath)
+    if not objRows:
+        return objCompanyMap
+
+    objHeader = objRows[0]
+    iCodeIndex = -1
+    iCompanyIndex = -1
+    for iIndex, pszValue in enumerate(objHeader):
+        if pszValue in ["PJコード", "PJコード_"]:
+            iCodeIndex = iIndex
+        if pszValue in ["会社名", "会社名_"]:
+            iCompanyIndex = iIndex
+
+    iStartIndex = 0
+    if iCodeIndex >= 0:
+        if iCompanyIndex < 0:
+            iCompanyIndex = iCodeIndex + 1
+        iStartIndex = 1
+    else:
+        iCodeIndex = 2
+        iCompanyIndex = 3
+
+    for objRow in objRows[iStartIndex:]:
+        if iCodeIndex >= len(objRow) or iCompanyIndex >= len(objRow):
+            continue
+        pszProjectCode: str = objRow[iCodeIndex].strip()
+        pszCompanyName: str = objRow[iCompanyIndex].strip()
+        if not pszProjectCode:
+            continue
+        objMatch = re.match(r"^(P\d{5}_|[A-OQ-Z]\d{3}_)", pszProjectCode)
+        if objMatch is None:
+            objMatch = re.match(r"^(P\d{5}|[A-OQ-Z]\d{3})", pszProjectCode)
+        if objMatch is None:
+            continue
+        pszPrefix: str = objMatch.group(1)
+        if not pszPrefix.endswith("_"):
+            pszPrefix += "_"
+        if pszPrefix not in objCompanyMap:
+            objCompanyMap[pszPrefix] = pszCompanyName
+
+    return objCompanyMap
+
+
+def build_step0003_rows(
+    objRows: List[List[str]],
+    objCompanyMap: Dict[str, str],
+) -> List[List[str]]:
+    if not objRows:
+        return []
+    objRemovalTargets = {
+        "C001_1Cカンパニー販管費",
+        "C002_2Cカンパニー販管費",
+        "C003_3Cカンパニー販管費",
+        "C004_4Cカンパニー販管費",
+        "C005_事業開発カンパニー販管費",
+        "C006_社長室カンパニー販管費",
+        "C007_本部カンパニー販管費",
+    }
+    iStartIndex = -1
+    for iRowIndex, objRow in enumerate(objRows):
+        pszName = objRow[0].strip() if objRow else ""
+        if pszName == "本部":
+            iStartIndex = iRowIndex
+            break
+
+    objOutputRows: List[List[str]] = []
+    for iRowIndex, objRow in enumerate(objRows):
+        if objRow and objRow[0].strip() in objRemovalTargets:
+            continue
+
+        pszCompanyName = objRow[0].strip() if iRowIndex < 2 and objRow else ""
+        if iRowIndex >= 2 and iStartIndex >= 0 and iRowIndex >= iStartIndex:
+            pszProjectName = objRow[0].strip() if objRow else ""
+            if pszProjectName == "本部":
+                pszCompanyName = "本部"
+            else:
+                objMatch = re.match(r"^(P\d{5}_|[A-OQ-Z]\d{3}_)", pszProjectName)
+                if objMatch is not None:
+                    pszPrefix = objMatch.group(1)
+                    pszCompanyName = objCompanyMap.get(pszPrefix, "")
+
+        objOutputRows.append([pszCompanyName] + (objRow[1:] if len(objRow) > 1 else []))
+
+    return objOutputRows
+
+
+def build_step0004_rows_for_summary(objRows: List[List[str]]) -> List[List[str]]:
+    if not objRows:
+        return []
+    objTargetNames: List[str] = [
+        "第一インキュ",
+        "第二インキュ",
+        "第三インキュ",
+        "第四インキュ",
+        "事業開発",
+        "子会社",
+        "投資先",
+        "本部",
+    ]
+    objTargetSet = set(objTargetNames)
+    objHeaderRow: List[str] = objRows[0]
+    objTotalRow: List[str] | None = None
+    for objRow in objRows:
+        if not objRow:
+            continue
+        pszName = objRow[0].strip()
+        if pszName == "科目名":
+            objHeaderRow = objRow
+        elif pszName == "合計" and objTotalRow is None:
+            objTotalRow = objRow
+
+    iMaxColumns: int = max(len(objRow) for objRow in objRows) if objRows else 0
+    objTotalsByName: Dict[str, List[float]] = {
+        pszName: [0.0] * iMaxColumns for pszName in objTargetNames
+    }
+    for objRow in objRows[2:]:
+        if not objRow:
+            continue
+        pszName = objRow[0].strip()
+        if pszName not in objTargetSet:
+            continue
+        for iColumnIndex in range(1, iMaxColumns):
+            if iColumnIndex < len(objRow):
+                objTotalsByName[pszName][iColumnIndex] += parse_number(objRow[iColumnIndex])
+
+    objOutputRows: List[List[str]] = []
+    objOutputRows.append(list(objHeaderRow))
+    for pszName in objTargetNames:
+        objNewRow: List[str] = [""] * iMaxColumns
+        objNewRow[0] = pszName
+        for iColumnIndex in range(1, iMaxColumns):
+            objNewRow[iColumnIndex] = format_number(objTotalsByName[pszName][iColumnIndex])
+        objOutputRows.append(objNewRow)
+    if objTotalRow is not None:
+        objOutputRows.append(list(objTotalRow))
+    return objOutputRows
+
+
+def build_step0005_rows_for_summary(
+    objSingleRows: List[List[str]],
+    objCumulativeRows: List[List[str]],
+) -> List[List[str]]:
+    iMaxRows: int = max(len(objSingleRows), len(objCumulativeRows))
+    objOutputRows: List[List[str]] = []
+    for iRowIndex in range(iMaxRows):
+        objSingleRow: List[str] = objSingleRows[iRowIndex] if iRowIndex < len(objSingleRows) else []
+        objCumulativeRow: List[str] = (
+            objCumulativeRows[iRowIndex] if iRowIndex < len(objCumulativeRows) else []
+        )
+        objOutputRows.append(list(objSingleRow) + [""] + list(objCumulativeRow))
+    return objOutputRows
+
+
+def build_step0006_rows_for_summary(objRows: List[List[str]]) -> List[List[str]]:
+    if not objRows:
+        return []
+    objHeaderRow: List[str] = objRows[0]
+    iHeaderLength: int = len(objHeaderRow)
+    objLabelRow: List[str] = [""] * iHeaderLength
+    objSubjectIndices: List[int] = [
+        iIndex for iIndex, pszValue in enumerate(objHeaderRow) if pszValue == "科目名"
+    ]
+    if len(objSubjectIndices) >= 1:
+        objLabelRow[objSubjectIndices[0]] = "単月"
+    if len(objSubjectIndices) >= 2:
+        objLabelRow[objSubjectIndices[1]] = "累計"
+    iAllocationIndex: int = next(
+        (iIndex for iIndex, pszValue in enumerate(objHeaderRow) if pszValue == "配賦販管費"),
+        -1,
+    )
+    if iAllocationIndex >= 0:
+        objLabelRow[iAllocationIndex] = "カンパニー別合計"
+    return [objLabelRow] + [list(objRow) for objRow in objRows]
+
+
 def generate_pj_summary_0005_files(objBaseDirectoryPath: Path, iYear: int, iMonth: int) -> None:
     pszMonth: str = f"{iMonth:02d}"
     pszSingleStep0001Path: Path = objBaseDirectoryPath / (
