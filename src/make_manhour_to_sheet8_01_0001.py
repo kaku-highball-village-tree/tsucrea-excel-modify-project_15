@@ -4165,6 +4165,70 @@ def process_single_input(pszInputManhourCsvPath: str) -> int:
                 + "\n"
             )
 
+    #
+    # 9. 管轄PJ表_step0007.tsv の生成
+    #
+    objOrgTableStep0007Path: Path = objOrgTableCsvPath.with_name("管轄PJ表_step0007.tsv")
+    objOrgTableStep0008Path: Path = objOrgTableCsvPath.with_name("管轄PJ表_step0008.tsv")
+    objOrgTableTsvPath: Path = objOrgTableCsvPath.with_suffix(".tsv")
+    if objOrgTableStep0003Path.exists():
+        shutil.copyfile(objOrgTableStep0003Path, objOrgTableStep0007Path)
+        objExistingProjectCodes: set[str] = set()
+        iMaxNo: int = 0
+        with open(objOrgTableStep0003Path, "r", encoding="utf-8") as objStep0003File:
+            objStep0003Reader = csv.reader(objStep0003File, delimiter="\t")
+            for objRow in objStep0003Reader:
+                if not objRow:
+                    continue
+                pszNoCandidate: str = objRow[0].strip()
+                if pszNoCandidate.isdigit():
+                    iMaxNo = max(iMaxNo, int(pszNoCandidate))
+                if len(objRow) >= 3:
+                    pszProjectCodeExisting: str = objRow[2].strip()
+                    if pszProjectCodeExisting:
+                        objExistingProjectCodes.add(pszProjectCodeExisting)
+
+        iNextNo: int = iMaxNo + 1
+        with open(pszStep11CompanyOutputPath, "r", encoding="utf-8") as objStep11CompanyFile:
+            objStep11Reader = csv.reader(objStep11CompanyFile, delimiter="\t")
+            with open(objOrgTableStep0007Path, "a", encoding="utf-8") as objStep0007File:
+                objStep0007Writer = csv.writer(
+                    objStep0007File,
+                    delimiter="\t",
+                    lineterminator="\n",
+                )
+                for objRow in objStep11Reader:
+                    if len(objRow) < 2:
+                        continue
+                    pszProjectCode: str = objRow[0].strip()
+                    pszBillingCompany: str = objRow[1].strip() if len(objRow) >= 2 else ""
+                    if not pszProjectCode or pszProjectCode in objExistingProjectCodes:
+                        continue
+                    objStep0007Writer.writerow(
+                        [
+                            str(iNextNo),
+                            pszProjectCode,
+                            pszProjectCode,
+                            pszBillingCompany,
+                            "",
+                        ]
+                    )
+                    objExistingProjectCodes.add(pszProjectCode)
+                    iNextNo += 1
+
+        with open(objOrgTableStep0007Path, "r", encoding="utf-8") as objStep0007File:
+            with open(objOrgTableStep0008Path, "w", encoding="utf-8") as objStep0008File:
+                for pszLine in objStep0007File:
+                    pszLineContent: str = pszLine.rstrip("\n")
+                    if pszLineContent.endswith("\t=match'"):
+                        pszLineContent = pszLineContent[: -len("\t=match'")]
+                    if pszLineContent.endswith("\t"):
+                        pszLineContent = pszLineContent[:-1]
+                    objStep0008File.write(pszLineContent + "\n")
+
+        if objOrgTableStep0008Path != objOrgTableTsvPath:
+            shutil.copyfile(objOrgTableStep0008Path, objOrgTableTsvPath)
+
     # Staff_List.tsv の処理は削除
 
     pszRawDataTsvPath: str = str(objBaseDirectoryPath / "Raw_Data.tsv")
