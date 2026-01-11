@@ -34,16 +34,6 @@ from tkinter import messagebox
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 import pandas as pd
-from SellGeneralAdminCost_Allocation_Cmd import (
-    build_step0003_rows,
-    build_step0004_rows_for_summary,
-    build_step0005_rows_for_summary,
-    build_step0006_rows_for_summary,
-    combine_company_sg_admin_columns,
-    load_org_table_company_map,
-    read_tsv_rows,
-    write_tsv_rows,
-)
 
 
 def write_debug_error(pszMessage: str, objBaseDirectoryPath: Path | None = None) -> None:
@@ -71,6 +61,75 @@ def write_tsv_rows(pszPath: str, objRows: List[List[str]]) -> None:
         objWriter = csv.writer(objFile, delimiter="\t", lineterminator="\n")
         for objRow in objRows:
             objWriter.writerow(objRow)
+
+
+def transpose_rows(objRows: List[List[str]]) -> List[List[str]]:
+    if not objRows:
+        return []
+    iMaxColumns: int = max(len(objRow) for objRow in objRows)
+    objNormalized: List[List[str]] = []
+    for objRow in objRows:
+        objNormalized.append(objRow + [""] * (iMaxColumns - len(objRow)))
+
+    objTransposed: List[List[str]] = []
+    for iColumnIndex in range(iMaxColumns):
+        objTransposed.append([objRow[iColumnIndex] for objRow in objNormalized])
+    return objTransposed
+
+
+def find_column_index(objHeader: List[str], pszName: str) -> int:
+    for iIndex, pszValue in enumerate(objHeader):
+        if pszValue == pszName:
+            return iIndex
+    return -1
+
+
+def filter_rows_by_columns(
+    objRows: List[List[str]],
+    objTargetColumns: List[str],
+) -> List[List[str]]:
+    if not objRows:
+        return []
+    objHeader: List[str] = objRows[0]
+    objColumnIndices: List[int] = [
+        find_column_index(objHeader, pszColumn)
+        for pszColumn in objTargetColumns
+    ]
+    objFilteredRows: List[List[str]] = []
+    for objRow in objRows:
+        objFilteredRow: List[str] = []
+        for iColumnIndex in objColumnIndices:
+            if 0 <= iColumnIndex < len(objRow):
+                objFilteredRow.append(objRow[iColumnIndex])
+            else:
+                objFilteredRow.append("")
+        objFilteredRows.append(objFilteredRow)
+    return objFilteredRows
+
+
+def build_cumulative_file_path(
+    pszDirectory: str,
+    pszPrefix: str,
+    objStart: Tuple[int, int],
+    objEnd: Tuple[int, int],
+) -> str:
+    iStartYear, iStartMonth = objStart
+    iEndYear, iEndMonth = objEnd
+    pszStartMonth: str = f"{iStartMonth:02d}"
+    pszEndMonth: str = f"{iEndMonth:02d}"
+    pszFileName: str = (
+        f"累計_{pszPrefix}_{iStartYear}年{pszStartMonth}月_{iEndYear}年{pszEndMonth}月.tsv"
+    )
+    return os.path.join(pszDirectory, pszFileName)
+
+
+def build_pj_summary_range(objEnd: Tuple[int, int]) -> Tuple[Tuple[int, int], Tuple[int, int]]:
+    iEndYear, iEndMonth = objEnd
+    if iEndMonth >= 4:
+        iStartYear: int = iEndYear
+    else:
+        iStartYear = iEndYear - 1
+    return (iStartYear, 4), (iEndYear, iEndMonth)
 
 
 def parse_number(pszText: str) -> float:
@@ -304,17 +363,64 @@ def build_step0006_rows_for_summary(objRows: List[List[str]]) -> List[List[str]]
 
 def generate_pj_summary_0005_files(objBaseDirectoryPath: Path, iYear: int, iMonth: int) -> None:
     pszMonth: str = f"{iMonth:02d}"
-    pszSingleStep0001Path: Path = objBaseDirectoryPath / (
-        f"0004_PJサマリ_step0001_単月_損益計算書_{iYear}年{pszMonth}月.tsv"
+    objStart, objEnd = build_pj_summary_range((iYear, iMonth))
+    pszSinglePlPath: Path = objBaseDirectoryPath / (
+        f"損益計算書_販管費配賦_{iYear}年{pszMonth}月_A∪B_プロジェクト名_C∪D_vertical.tsv"
     )
-    pszCumulativeStep0001Path: Path = objBaseDirectoryPath / (
-        f"0004_PJサマリ_step0001_累計_損益計算書_{iYear}年{pszMonth}月.tsv"
+    pszCumulativePlBasePath: Path = Path(
+        build_cumulative_file_path(
+            str(objBaseDirectoryPath),
+            "損益計算書",
+            objStart,
+            objEnd,
+        )
     )
-    if not pszSingleStep0001Path.exists() or not pszCumulativeStep0001Path.exists():
+    pszCumulativePlPath: Path = pszCumulativePlBasePath.with_name(
+        pszCumulativePlBasePath.name.replace(".tsv", "_vertical.tsv")
+    )
+
+    objSingleRows: List[List[str]] | None = None
+    if pszSinglePlPath.exists():
+        objSingleRows = read_tsv_rows(str(pszSinglePlPath))
+    else:
+        pszSinglePlStep0010Path: Path = objBaseDirectoryPath / (
+            f"損益計算書_販管費配賦_step0010_{iYear}年{pszMonth}月_A∪B_プロジェクト名_C∪D.tsv"
+        )
+        pszSinglePlStep0010VerticalPath: Path = pszSinglePlStep0010Path.with_name(
+            pszSinglePlStep0010Path.name.replace(".tsv", "_vertical.tsv")
+        )
+        if pszSinglePlStep0010VerticalPath.exists():
+            objSingleRows = read_tsv_rows(str(pszSinglePlStep0010VerticalPath))
+        elif pszSinglePlStep0010Path.exists():
+            objSingleRows = transpose_rows(read_tsv_rows(str(pszSinglePlStep0010Path)))
+
+    objCumulativeRows: List[List[str]] | None = None
+    if pszCumulativePlPath.exists():
+        objCumulativeRows = read_tsv_rows(str(pszCumulativePlPath))
+    else:
+        pszCumulativePlHorizontalPath: Path = pszCumulativePlPath.with_name(
+            pszCumulativePlPath.name.replace("_vertical.tsv", ".tsv")
+        )
+        if pszCumulativePlHorizontalPath.exists():
+            objCumulativeRows = transpose_rows(read_tsv_rows(str(pszCumulativePlHorizontalPath)))
+
+    if objSingleRows is None or objCumulativeRows is None:
         return
 
-    objSingleStep0001Rows = read_tsv_rows(str(pszSingleStep0001Path))
-    objCumulativeStep0001Rows = read_tsv_rows(str(pszCumulativeStep0001Path))
+    objSummaryTargetColumns: List[str] = [
+        "科目名",
+        "純売上高",
+        "売上原価",
+        "売上総利益",
+        "配賦販管費",
+        "1Cカンパニー販管費",
+        "2Cカンパニー販管費",
+        "3Cカンパニー販管費",
+        "4Cカンパニー販管費",
+        "事業開発カンパニー販管費",
+    ]
+    objSingleStep0001Rows = filter_rows_by_columns(objSingleRows, objSummaryTargetColumns)
+    objCumulativeStep0001Rows = filter_rows_by_columns(objCumulativeRows, objSummaryTargetColumns)
     pszSingleSummaryPath: Path = objBaseDirectoryPath / (
         f"0005_PJサマリ_step0001_単月_損益計算書_{iYear}年{pszMonth}月.tsv"
     )
