@@ -1977,6 +1977,28 @@ def build_step0005_rows_for_summary(
     return objOutputRows
 
 
+def build_step0006_rows_for_summary(objRows: List[List[str]]) -> List[List[str]]:
+    if not objRows:
+        return []
+    objHeaderRow: List[str] = objRows[0]
+    iHeaderLength: int = len(objHeaderRow)
+    objLabelRow: List[str] = [""] * iHeaderLength
+    objSubjectIndices: List[int] = [
+        iIndex for iIndex, pszValue in enumerate(objHeaderRow) if pszValue == "科目名"
+    ]
+    if len(objSubjectIndices) >= 1:
+        objLabelRow[objSubjectIndices[0]] = "単月"
+    if len(objSubjectIndices) >= 2:
+        objLabelRow[objSubjectIndices[1]] = "累計"
+    iAllocationIndex: int = next(
+        (iIndex for iIndex, pszValue in enumerate(objHeaderRow) if pszValue == "配賦販管費"),
+        -1,
+    )
+    if iAllocationIndex >= 0:
+        objLabelRow[iAllocationIndex] = "カンパニー別合計"
+    return [objLabelRow] + [list(objRow) for objRow in objRows]
+
+
 def filter_rows_by_names(
     objRows: List[List[str]],
     objTargetNames: List[str],
@@ -2558,6 +2580,12 @@ def create_pj_summary(
         objCumulativeStep0004Rows,
     )
     write_tsv_rows(pszStep0005Path, objStep0005Rows)
+    pszStep0006Path: str = os.path.join(
+        pszDirectory,
+        f"0004_PJサマリ_step0006_単・累_損益計算書_{iEndYear}年{pszEndMonth}月.tsv",
+    )
+    objStep0006Rows = build_step0006_rows_for_summary(objStep0005Rows)
+    write_tsv_rows(pszStep0006Path, objStep0006Rows)
 
     objSingleOutputRows: List[List[str]] = []
     for objRow in objSingleRows:
