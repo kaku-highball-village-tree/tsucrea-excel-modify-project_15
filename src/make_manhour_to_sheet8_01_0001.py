@@ -34,6 +34,16 @@ from tkinter import messagebox
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 import pandas as pd
+from SellGeneralAdminCost_Allocation_Cmd import (
+    build_step0003_rows,
+    build_step0004_rows_for_summary,
+    build_step0005_rows_for_summary,
+    build_step0006_rows_for_summary,
+    combine_company_sg_admin_columns,
+    load_org_table_company_map,
+    read_tsv_rows,
+    write_tsv_rows,
+)
 
 
 def write_debug_error(pszMessage: str, objBaseDirectoryPath: Path | None = None) -> None:
@@ -43,6 +53,79 @@ def write_debug_error(pszMessage: str, objBaseDirectoryPath: Path | None = None)
     )
     with open(objErrorPath, mode="a", encoding="utf-8") as objFile:
         objFile.write(pszMessage + "\n")
+
+
+def generate_pj_summary_0005_files(objBaseDirectoryPath: Path, iYear: int, iMonth: int) -> None:
+    pszMonth: str = f"{iMonth:02d}"
+    pszSingleStep0001Path: Path = objBaseDirectoryPath / (
+        f"0004_PJサマリ_step0001_単月_損益計算書_{iYear}年{pszMonth}月.tsv"
+    )
+    pszCumulativeStep0001Path: Path = objBaseDirectoryPath / (
+        f"0004_PJサマリ_step0001_累計_損益計算書_{iYear}年{pszMonth}月.tsv"
+    )
+    if not pszSingleStep0001Path.exists() or not pszCumulativeStep0001Path.exists():
+        return
+
+    objSingleStep0001Rows = read_tsv_rows(str(pszSingleStep0001Path))
+    objCumulativeStep0001Rows = read_tsv_rows(str(pszCumulativeStep0001Path))
+    pszSingleSummaryPath: Path = objBaseDirectoryPath / (
+        f"0005_PJサマリ_step0001_単月_損益計算書_{iYear}年{pszMonth}月.tsv"
+    )
+    pszCumulativeSummaryPath: Path = objBaseDirectoryPath / (
+        f"0005_PJサマリ_step0001_累計_損益計算書_{iYear}年{pszMonth}月.tsv"
+    )
+    write_tsv_rows(str(pszSingleSummaryPath), objSingleStep0001Rows)
+    write_tsv_rows(str(pszCumulativeSummaryPath), objCumulativeStep0001Rows)
+
+    objSingleStep0002Rows = combine_company_sg_admin_columns(objSingleStep0001Rows)
+    objCumulativeStep0002Rows = combine_company_sg_admin_columns(objCumulativeStep0001Rows)
+    pszSingleStep0002Path: Path = objBaseDirectoryPath / (
+        f"0005_PJサマリ_step0002_単月_損益計算書_{iYear}年{pszMonth}月.tsv"
+    )
+    pszCumulativeStep0002Path: Path = objBaseDirectoryPath / (
+        f"0005_PJサマリ_step0002_累計_損益計算書_{iYear}年{pszMonth}月.tsv"
+    )
+    write_tsv_rows(str(pszSingleStep0002Path), objSingleStep0002Rows)
+    write_tsv_rows(str(pszCumulativeStep0002Path), objCumulativeStep0002Rows)
+
+    pszOrgTablePath: Path = objBaseDirectoryPath / "管轄PJ表.tsv"
+    objCompanyMap = load_org_table_company_map(str(pszOrgTablePath))
+    objSingleStep0003Rows = build_step0003_rows(objSingleStep0002Rows, objCompanyMap)
+    objCumulativeStep0003Rows = build_step0003_rows(objCumulativeStep0002Rows, objCompanyMap)
+    pszSingleStep0003Path: Path = objBaseDirectoryPath / (
+        f"0005_PJサマリ_step0003_単月_損益計算書_{iYear}年{pszMonth}月.tsv"
+    )
+    pszCumulativeStep0003Path: Path = objBaseDirectoryPath / (
+        f"0005_PJサマリ_step0003_累計_損益計算書_{iYear}年{pszMonth}月.tsv"
+    )
+    write_tsv_rows(str(pszSingleStep0003Path), objSingleStep0003Rows)
+    write_tsv_rows(str(pszCumulativeStep0003Path), objCumulativeStep0003Rows)
+
+    objSingleStep0004Rows = build_step0004_rows_for_summary(objSingleStep0003Rows)
+    objCumulativeStep0004Rows = build_step0004_rows_for_summary(objCumulativeStep0003Rows)
+    pszSingleStep0004Path: Path = objBaseDirectoryPath / (
+        f"0005_PJサマリ_step0004_単月_損益計算書_{iYear}年{pszMonth}月.tsv"
+    )
+    pszCumulativeStep0004Path: Path = objBaseDirectoryPath / (
+        f"0005_PJサマリ_step0004_累計_損益計算書_{iYear}年{pszMonth}月.tsv"
+    )
+    write_tsv_rows(str(pszSingleStep0004Path), objSingleStep0004Rows)
+    write_tsv_rows(str(pszCumulativeStep0004Path), objCumulativeStep0004Rows)
+
+    objStep0005Rows = build_step0005_rows_for_summary(
+        objSingleStep0004Rows,
+        objCumulativeStep0004Rows,
+    )
+    pszStep0005Path: Path = objBaseDirectoryPath / (
+        f"0005_PJサマリ_step0005_単・累_損益計算書_{iYear}年{pszMonth}月.tsv"
+    )
+    write_tsv_rows(str(pszStep0005Path), objStep0005Rows)
+
+    objStep0006Rows = build_step0006_rows_for_summary(objStep0005Rows)
+    pszStep0006Path: Path = objBaseDirectoryPath / (
+        f"0005_PJサマリ_step0006_単・累_損益計算書_{iYear}年{pszMonth}月.tsv"
+    )
+    write_tsv_rows(str(pszStep0006Path), objStep0006Rows)
 
 
 def get_target_year_month_from_filename(pszInputFilePath: str) -> Tuple[int, int]:
@@ -4174,6 +4257,7 @@ def process_single_input(pszInputManhourCsvPath: str) -> int:
     if objOrgTableStep0003Path.exists():
         shutil.copyfile(objOrgTableStep0003Path, objOrgTableStep0007Path)
         objExistingProjectCodes: set[str] = set()
+        objExistingProjectCodeKeys: set[str] = set()
         iMaxNo: int = 0
         with open(objOrgTableStep0003Path, "r", encoding="utf-8") as objStep0003File:
             objStep0003Reader = csv.reader(objStep0003File, delimiter="\t")
@@ -4187,6 +4271,12 @@ def process_single_input(pszInputManhourCsvPath: str) -> int:
                     pszProjectCodeExisting: str = objRow[2].strip()
                     if pszProjectCodeExisting:
                         objExistingProjectCodes.add(pszProjectCodeExisting)
+                        objProjectCodeKeyMatch = re.match(
+                            r"^(P\d{5}_|[A-OQ-Z]\d{3}_)",
+                            pszProjectCodeExisting,
+                        )
+                        if objProjectCodeKeyMatch is not None:
+                            objExistingProjectCodeKeys.add(objProjectCodeKeyMatch.group(1))
 
         iNextNo: int = iMaxNo + 1
         with open(pszStep11CompanyOutputPath, "r", encoding="utf-8") as objStep11CompanyFile:
@@ -4201,15 +4291,24 @@ def process_single_input(pszInputManhourCsvPath: str) -> int:
                     if len(objRow) < 2:
                         continue
                     pszProjectCode: str = objRow[0].strip()
-                    pszBillingCompany: str = objRow[1].strip() if len(objRow) >= 2 else ""
-                    if not pszProjectCode or pszProjectCode in objExistingProjectCodes:
+                    pszPostingCompany: str = objRow[1].strip() if len(objRow) >= 2 else ""
+                    objProjectCodeKeyMatch = re.match(r"^(P\d{5}_|[A-OQ-Z]\d{3}_)", pszProjectCode)
+                    pszProjectCodeKey: str | None = (
+                        objProjectCodeKeyMatch.group(1) if objProjectCodeKeyMatch is not None else None
+                    )
+                    if (
+                        not pszProjectCode
+                        or re.match(r"^C\d{3}_", pszProjectCode)
+                        or pszProjectCode in objExistingProjectCodes
+                        or (pszProjectCodeKey is not None and pszProjectCodeKey in objExistingProjectCodeKeys)
+                    ):
                         continue
                     objStep0007Writer.writerow(
                         [
                             str(iNextNo),
                             pszProjectCode,
                             pszProjectCode,
-                            pszBillingCompany,
+                            pszPostingCompany,
                             "",
                         ]
                     )
@@ -4234,6 +4333,8 @@ def process_single_input(pszInputManhourCsvPath: str) -> int:
     pszRawDataTsvPath: str = str(objBaseDirectoryPath / "Raw_Data.tsv")
 
     # With_Salary.tsv の処理は削除
+
+    generate_pj_summary_0005_files(objBaseDirectoryPath, iFileYear, iFileMonth)
 
     print("OK: created files")
     for objTsvPath in sorted(objBaseDirectoryPath.glob("*.tsv")):
