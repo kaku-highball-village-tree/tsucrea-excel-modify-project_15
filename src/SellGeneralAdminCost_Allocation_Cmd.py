@@ -1910,6 +1910,95 @@ def build_step0003_rows(
     return objOutputRows
 
 
+def build_step0004_rows_for_summary(objRows: List[List[str]]) -> List[List[str]]:
+    if not objRows:
+        return []
+    objTargetNames: List[str] = [
+        "第一インキュ",
+        "第二インキュ",
+        "第三インキュ",
+        "第四インキュ",
+        "事業開発",
+        "子会社",
+        "投資先",
+        "本部",
+    ]
+    objTargetSet = set(objTargetNames)
+    objHeaderRow: List[str] = objRows[0]
+    objTotalRow: Optional[List[str]] = None
+    for objRow in objRows:
+        if not objRow:
+            continue
+        pszName = objRow[0].strip()
+        if pszName == "科目名":
+            objHeaderRow = objRow
+        elif pszName == "合計" and objTotalRow is None:
+            objTotalRow = objRow
+
+    iMaxColumns: int = max(len(objRow) for objRow in objRows) if objRows else 0
+    objTotalsByName: Dict[str, List[float]] = {
+        pszName: [0.0] * iMaxColumns for pszName in objTargetNames
+    }
+    for objRow in objRows[2:]:
+        if not objRow:
+            continue
+        pszName = objRow[0].strip()
+        if pszName not in objTargetSet:
+            continue
+        for iColumnIndex in range(1, iMaxColumns):
+            if iColumnIndex < len(objRow):
+                objTotalsByName[pszName][iColumnIndex] += parse_number(objRow[iColumnIndex])
+
+    objOutputRows: List[List[str]] = []
+    objOutputRows.append(list(objHeaderRow))
+    for pszName in objTargetNames:
+        objNewRow: List[str] = [""] * iMaxColumns
+        objNewRow[0] = pszName
+        for iColumnIndex in range(1, iMaxColumns):
+            objNewRow[iColumnIndex] = format_number(objTotalsByName[pszName][iColumnIndex])
+        objOutputRows.append(objNewRow)
+    if objTotalRow is not None:
+        objOutputRows.append(list(objTotalRow))
+    return objOutputRows
+
+
+def build_step0005_rows_for_summary(
+    objSingleRows: List[List[str]],
+    objCumulativeRows: List[List[str]],
+) -> List[List[str]]:
+    iMaxRows: int = max(len(objSingleRows), len(objCumulativeRows))
+    objOutputRows: List[List[str]] = []
+    for iRowIndex in range(iMaxRows):
+        objSingleRow: List[str] = objSingleRows[iRowIndex] if iRowIndex < len(objSingleRows) else []
+        objCumulativeRow: List[str] = (
+            objCumulativeRows[iRowIndex] if iRowIndex < len(objCumulativeRows) else []
+        )
+        objOutputRows.append(list(objSingleRow) + [""] + list(objCumulativeRow))
+    return objOutputRows
+
+
+def build_step0006_rows_for_summary(objRows: List[List[str]]) -> List[List[str]]:
+    if not objRows:
+        return []
+    objHeaderRow: List[str] = objRows[0]
+    iHeaderLength: int = len(objHeaderRow)
+    objLabelRow: List[str] = [""] * iHeaderLength
+    objSubjectIndices: List[int] = [
+        iIndex for iIndex, pszValue in enumerate(objHeaderRow) if pszValue == "科目名"
+    ]
+    if len(objSubjectIndices) >= 1:
+        objLabelRow[objSubjectIndices[0]] = "単月"
+    if len(objSubjectIndices) >= 2:
+        objLabelRow[objSubjectIndices[1]] = "累計"
+    iAllocationIndex: int = next(
+        (iIndex for iIndex, pszValue in enumerate(objHeaderRow) if pszValue == "配賦販管費"),
+        -1,
+    )
+    if iAllocationIndex >= 0:
+        objLabelRow[iAllocationIndex] = "カンパニー別合計"
+    return [objLabelRow] + [list(objRow) for objRow in objRows]
+
+
 def filter_rows_by_names(
     objRows: List[List[str]],
     objTargetNames: List[str],
@@ -2470,6 +2559,33 @@ def create_pj_summary(
     )
     write_tsv_rows(pszSingleStep0003Path, objSingleStep0003Rows)
     write_tsv_rows(pszCumulativeStep0003Path, objCumulativeStep0003Rows)
+    pszSingleStep0004Path: str = os.path.join(
+        pszDirectory,
+        f"0004_PJサマリ_step0004_単月_損益計算書_{iEndYear}年{pszEndMonth}月.tsv",
+    )
+    pszCumulativeStep0004Path: str = os.path.join(
+        pszDirectory,
+        f"0004_PJサマリ_step0004_累計_損益計算書_{iEndYear}年{pszEndMonth}月.tsv",
+    )
+    objSingleStep0004Rows = build_step0004_rows_for_summary(objSingleStep0003Rows)
+    objCumulativeStep0004Rows = build_step0004_rows_for_summary(objCumulativeStep0003Rows)
+    write_tsv_rows(pszSingleStep0004Path, objSingleStep0004Rows)
+    write_tsv_rows(pszCumulativeStep0004Path, objCumulativeStep0004Rows)
+    pszStep0005Path: str = os.path.join(
+        pszDirectory,
+        f"0004_PJサマリ_step0005_単・累_損益計算書_{iEndYear}年{pszEndMonth}月.tsv",
+    )
+    objStep0005Rows = build_step0005_rows_for_summary(
+        objSingleStep0004Rows,
+        objCumulativeStep0004Rows,
+    )
+    write_tsv_rows(pszStep0005Path, objStep0005Rows)
+    pszStep0006Path: str = os.path.join(
+        pszDirectory,
+        f"0004_PJサマリ_step0006_単・累_損益計算書_{iEndYear}年{pszEndMonth}月.tsv",
+    )
+    objStep0006Rows = build_step0006_rows_for_summary(objStep0005Rows)
+    write_tsv_rows(pszStep0006Path, objStep0006Rows)
 
     objSingleOutputRows: List[List[str]] = []
     for objRow in objSingleRows:
