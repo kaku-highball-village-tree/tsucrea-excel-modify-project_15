@@ -45,6 +45,57 @@ def write_debug_error(pszMessage: str, objBaseDirectoryPath: Path | None = None)
         objFile.write(pszMessage + "\n")
 
 
+def copy_pj_summary_0005_files(objBaseDirectoryPath: Path, iYear: int, iMonth: int) -> None:
+    pszMonth: str = f"{iMonth:02d}"
+    objCopyPairs: List[Tuple[str, str]] = [
+        (
+            f"0004_PJサマリ_step0001_単月_損益計算書_{iYear}年{pszMonth}月.tsv",
+            f"0005_PJサマリ_step0001_単月_損益計算書_{iYear}年{pszMonth}月.tsv",
+        ),
+        (
+            f"0004_PJサマリ_step0001_累計_損益計算書_{iYear}年{pszMonth}月.tsv",
+            f"0005_PJサマリ_step0001_累計_損益計算書_{iYear}年{pszMonth}月.tsv",
+        ),
+        (
+            f"0004_PJサマリ_step0002_単月_損益計算書_{iYear}年{pszMonth}月.tsv",
+            f"0005_PJサマリ_step0002_単月_損益計算書_{iYear}年{pszMonth}月.tsv",
+        ),
+        (
+            f"0004_PJサマリ_step0002_累計_損益計算書_{iYear}年{pszMonth}月.tsv",
+            f"0005_PJサマリ_step0002_累計_損益計算書_{iYear}年{pszMonth}月.tsv",
+        ),
+        (
+            f"0004_PJサマリ_step0003_単月_損益計算書_{iYear}年{pszMonth}月.tsv",
+            f"0005_PJサマリ_step0003_単月_損益計算書_{iYear}年{pszMonth}月.tsv",
+        ),
+        (
+            f"0004_PJサマリ_step0003_累計_損益計算書_{iYear}年{pszMonth}月.tsv",
+            f"0005_PJサマリ_step0003_累計_損益計算書_{iYear}年{pszMonth}月.tsv",
+        ),
+        (
+            f"0004_PJサマリ_step0004_単月_損益計算書_{iYear}年{pszMonth}月.tsv",
+            f"0005_PJサマリ_step0004_単月_損益計算書_{iYear}年{pszMonth}月.tsv",
+        ),
+        (
+            f"0004_PJサマリ_step0004_累計_損益計算書_{iYear}年{pszMonth}月.tsv",
+            f"0005_PJサマリ_step0004_累計_損益計算書_{iYear}年{pszMonth}月.tsv",
+        ),
+        (
+            f"0004_PJサマリ_step0005_単・累_損益計算書_{iYear}年{pszMonth}月.tsv",
+            f"0005_PJサマリ_step0005_単・累_損益計算書_{iYear}年{pszMonth}月.tsv",
+        ),
+        (
+            f"0004_PJサマリ_step0006_単・累_損益計算書_{iYear}年{pszMonth}月.tsv",
+            f"0005_PJサマリ_step0006_単・累_損益計算書_{iYear}年{pszMonth}月.tsv",
+        ),
+    ]
+    for pszSourceName, pszDestinationName in objCopyPairs:
+        objSourcePath: Path = objBaseDirectoryPath / pszSourceName
+        objDestinationPath: Path = objBaseDirectoryPath / pszDestinationName
+        if objSourcePath.exists():
+            shutil.copyfile(objSourcePath, objDestinationPath)
+
+
 def get_target_year_month_from_filename(pszInputFilePath: str) -> Tuple[int, int]:
     pszBaseName: str = os.path.basename(pszInputFilePath)
     objMatch: re.Match[str] | None = re.search(r"(\d{2})\.(\d{1,2})\.csv$", pszBaseName)
@@ -4174,6 +4225,7 @@ def process_single_input(pszInputManhourCsvPath: str) -> int:
     if objOrgTableStep0003Path.exists():
         shutil.copyfile(objOrgTableStep0003Path, objOrgTableStep0007Path)
         objExistingProjectCodes: set[str] = set()
+        objExistingProjectCodeKeys: set[str] = set()
         iMaxNo: int = 0
         with open(objOrgTableStep0003Path, "r", encoding="utf-8") as objStep0003File:
             objStep0003Reader = csv.reader(objStep0003File, delimiter="\t")
@@ -4187,6 +4239,12 @@ def process_single_input(pszInputManhourCsvPath: str) -> int:
                     pszProjectCodeExisting: str = objRow[2].strip()
                     if pszProjectCodeExisting:
                         objExistingProjectCodes.add(pszProjectCodeExisting)
+                        objProjectCodeKeyMatch = re.match(
+                            r"^(P\d{5}_|[A-OQ-Z]\d{3}_)",
+                            pszProjectCodeExisting,
+                        )
+                        if objProjectCodeKeyMatch is not None:
+                            objExistingProjectCodeKeys.add(objProjectCodeKeyMatch.group(1))
 
         iNextNo: int = iMaxNo + 1
         with open(pszStep11CompanyOutputPath, "r", encoding="utf-8") as objStep11CompanyFile:
@@ -4201,15 +4259,24 @@ def process_single_input(pszInputManhourCsvPath: str) -> int:
                     if len(objRow) < 2:
                         continue
                     pszProjectCode: str = objRow[0].strip()
-                    pszBillingCompany: str = objRow[1].strip() if len(objRow) >= 2 else ""
-                    if not pszProjectCode or pszProjectCode in objExistingProjectCodes:
+                    pszPostingCompany: str = objRow[1].strip() if len(objRow) >= 2 else ""
+                    objProjectCodeKeyMatch = re.match(r"^(P\d{5}_|[A-OQ-Z]\d{3}_)", pszProjectCode)
+                    pszProjectCodeKey: str | None = (
+                        objProjectCodeKeyMatch.group(1) if objProjectCodeKeyMatch is not None else None
+                    )
+                    if (
+                        not pszProjectCode
+                        or re.match(r"^C\d{3}_", pszProjectCode)
+                        or pszProjectCode in objExistingProjectCodes
+                        or (pszProjectCodeKey is not None and pszProjectCodeKey in objExistingProjectCodeKeys)
+                    ):
                         continue
                     objStep0007Writer.writerow(
                         [
                             str(iNextNo),
                             pszProjectCode,
                             pszProjectCode,
-                            pszBillingCompany,
+                            pszPostingCompany,
                             "",
                         ]
                     )
@@ -4234,6 +4301,8 @@ def process_single_input(pszInputManhourCsvPath: str) -> int:
     pszRawDataTsvPath: str = str(objBaseDirectoryPath / "Raw_Data.tsv")
 
     # With_Salary.tsv の処理は削除
+
+    copy_pj_summary_0005_files(objBaseDirectoryPath, iFileYear, iFileMonth)
 
     print("OK: created files")
     for objTsvPath in sorted(objBaseDirectoryPath.glob("*.tsv")):
