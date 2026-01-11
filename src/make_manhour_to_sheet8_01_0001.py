@@ -4169,6 +4169,7 @@ def process_single_input(pszInputManhourCsvPath: str) -> int:
     # 9. 管轄PJ表_step0007.tsv の生成
     #
     objOrgTableStep0007Path: Path = objOrgTableCsvPath.with_name("管轄PJ表_step0007.tsv")
+    objOrgTableStep0008Path: Path = objOrgTableCsvPath.with_name("管轄PJ表_step0008.tsv")
     if objOrgTableStep0003Path.exists():
         shutil.copyfile(objOrgTableStep0003Path, objOrgTableStep0007Path)
         objExistingProjectCodes: set[str] = set()
@@ -4213,6 +4214,16 @@ def process_single_input(pszInputManhourCsvPath: str) -> int:
                     )
                     objExistingProjectCodes.add(pszProjectCode)
                     iNextNo += 1
+
+        with open(objOrgTableStep0007Path, "r", encoding="utf-8") as objStep0007File:
+            with open(objOrgTableStep0008Path, "w", encoding="utf-8") as objStep0008File:
+                for pszLine in objStep0007File:
+                    pszLineContent: str = pszLine.rstrip("\n")
+                    if pszLineContent.endswith("\t=match'"):
+                        pszLineContent = pszLineContent[: -len("\t=match'")]
+                    if pszLineContent.endswith("\t"):
+                        pszLineContent = pszLineContent[:-1]
+                    objStep0008File.write(pszLineContent + "\n")
 
     # Staff_List.tsv の処理は削除
 
