@@ -1273,65 +1273,6 @@ def read_tsv_rows(pszPath: str) -> List[List[str]]:
     return objRows
 
 
-def build_org_table_step0007(
-    pszDirectory: str,
-    objYearMonth: Optional[Tuple[int, int]],
-) -> Optional[str]:
-    if objYearMonth is None:
-        return None
-    iYear, iMonth = objYearMonth
-    pszStep0003Path: str = os.path.join(pszDirectory, "管轄PJ表_step0003.tsv")
-    pszStep11Path: str = os.path.join(
-        pszDirectory,
-        f"工数_{iYear}年{iMonth:02d}月_step11_各プロジェクトの計上カンパニー名_工数_カンパニーの工数.tsv",
-    )
-    pszStep0007Path: str = os.path.join(pszDirectory, "管轄PJ表_step0007.tsv")
-    if not os.path.exists(pszStep0003Path) or not os.path.exists(pszStep11Path):
-        return None
-
-    objStep0003Rows: List[List[str]] = read_tsv_rows(pszStep0003Path)
-    objExistingCodes: set[str] = set()
-    iMaxNo: int = 0
-    for objRow in objStep0003Rows:
-        if not objRow:
-            continue
-        if objRow[0].strip() == "No":
-            continue
-        if len(objRow) >= 3:
-            pszProjectCode: str = objRow[2].strip()
-            if pszProjectCode:
-                objExistingCodes.add(pszProjectCode)
-        try:
-            iNoValue = int(objRow[0])
-        except (ValueError, TypeError):
-            continue
-        iMaxNo = max(iMaxNo, iNoValue)
-
-    objOutputRows: List[List[str]] = [list(objRow) for objRow in objStep0003Rows]
-    objStep11Rows: List[List[str]] = read_tsv_rows(pszStep11Path)
-    for objRow in objStep11Rows:
-        if not objRow:
-            continue
-        pszProjectCode = objRow[0].strip()
-        if pszProjectCode == "" or pszProjectCode in objExistingCodes:
-            continue
-        pszCompanyName: str = objRow[1].strip() if len(objRow) > 1 else ""
-        iMaxNo += 1
-        objOutputRows.append(
-            [
-                str(iMaxNo),
-                pszProjectCode,
-                pszProjectCode,
-                pszCompanyName,
-                "",
-            ]
-        )
-        objExistingCodes.add(pszProjectCode)
-
-    write_tsv_rows(pszStep0007Path, objOutputRows)
-    return pszStep0007Path
-
-
 def sum_tsv_rows(objBaseRows: List[List[str]], objAddRows: List[List[str]]) -> List[List[str]]:
     if not objBaseRows:
         return [list(objRow) for objRow in objAddRows]
@@ -3449,14 +3390,6 @@ def main(argv: list[str]) -> int:
             objManhourMap,
             objCompanyMap,
         )
-
-        objOrgTableStep0007Path: Optional[str] = build_org_table_step0007(
-            os.path.dirname(pszManhourPath),
-            extract_year_month_from_path(pszManhourPath)
-            or extract_year_month_from_path(pszPlPath),
-        )
-        if objOrgTableStep0007Path is not None:
-            print(f"Output: {objOrgTableStep0007Path}")
 
         print(f"Output: {pszOutputStep0001Path}")
         print(f"Output: {pszOutputStep0002Path}")
