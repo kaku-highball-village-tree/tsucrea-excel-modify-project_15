@@ -4201,15 +4201,19 @@ def process_single_input(pszInputManhourCsvPath: str) -> int:
                     if len(objRow) < 2:
                         continue
                     pszProjectCode: str = objRow[0].strip()
-                    pszBillingCompany: str = objRow[1].strip() if len(objRow) >= 2 else ""
-                    if not pszProjectCode or pszProjectCode in objExistingProjectCodes:
+                    pszPostingCompany: str = objRow[1].strip() if len(objRow) >= 2 else ""
+                    if (
+                        not pszProjectCode
+                        or re.match(r"^C\d{3}_", pszProjectCode)
+                        or pszProjectCode in objExistingProjectCodes
+                    ):
                         continue
                     objStep0007Writer.writerow(
                         [
                             str(iNextNo),
                             pszProjectCode,
                             pszProjectCode,
-                            pszBillingCompany,
+                            pszPostingCompany,
                             "",
                         ]
                     )
