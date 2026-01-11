@@ -4174,6 +4174,7 @@ def process_single_input(pszInputManhourCsvPath: str) -> int:
     if objOrgTableStep0003Path.exists():
         shutil.copyfile(objOrgTableStep0003Path, objOrgTableStep0007Path)
         objExistingProjectCodes: set[str] = set()
+        objExistingProjectCodeKeys: set[str] = set()
         iMaxNo: int = 0
         with open(objOrgTableStep0003Path, "r", encoding="utf-8") as objStep0003File:
             objStep0003Reader = csv.reader(objStep0003File, delimiter="\t")
@@ -4187,6 +4188,12 @@ def process_single_input(pszInputManhourCsvPath: str) -> int:
                     pszProjectCodeExisting: str = objRow[2].strip()
                     if pszProjectCodeExisting:
                         objExistingProjectCodes.add(pszProjectCodeExisting)
+                        objProjectCodeKeyMatch = re.match(
+                            r"^(P\d{5}_|[A-OQ-Z]\d{3}_)",
+                            pszProjectCodeExisting,
+                        )
+                        if objProjectCodeKeyMatch is not None:
+                            objExistingProjectCodeKeys.add(objProjectCodeKeyMatch.group(1))
 
         iNextNo: int = iMaxNo + 1
         with open(pszStep11CompanyOutputPath, "r", encoding="utf-8") as objStep11CompanyFile:
@@ -4201,15 +4208,24 @@ def process_single_input(pszInputManhourCsvPath: str) -> int:
                     if len(objRow) < 2:
                         continue
                     pszProjectCode: str = objRow[0].strip()
-                    pszBillingCompany: str = objRow[1].strip() if len(objRow) >= 2 else ""
-                    if not pszProjectCode or pszProjectCode in objExistingProjectCodes:
+                    pszPostingCompany: str = objRow[1].strip() if len(objRow) >= 2 else ""
+                    objProjectCodeKeyMatch = re.match(r"^(P\d{5}_|[A-OQ-Z]\d{3}_)", pszProjectCode)
+                    pszProjectCodeKey: str | None = (
+                        objProjectCodeKeyMatch.group(1) if objProjectCodeKeyMatch is not None else None
+                    )
+                    if (
+                        not pszProjectCode
+                        or re.match(r"^C\d{3}_", pszProjectCode)
+                        or pszProjectCode in objExistingProjectCodes
+                        or (pszProjectCodeKey is not None and pszProjectCodeKey in objExistingProjectCodeKeys)
+                    ):
                         continue
                     objStep0007Writer.writerow(
                         [
                             str(iNextNo),
                             pszProjectCode,
                             pszProjectCode,
-                            pszBillingCompany,
+                            pszPostingCompany,
                             "",
                         ]
                     )
