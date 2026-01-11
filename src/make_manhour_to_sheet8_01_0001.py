@@ -45,6 +45,57 @@ def write_debug_error(pszMessage: str, objBaseDirectoryPath: Path | None = None)
         objFile.write(pszMessage + "\n")
 
 
+def copy_pj_summary_0005_files(objBaseDirectoryPath: Path, iYear: int, iMonth: int) -> None:
+    pszMonth: str = f"{iMonth:02d}"
+    objCopyPairs: List[Tuple[str, str]] = [
+        (
+            f"0004_PJサマリ_step0001_単月_損益計算書_{iYear}年{pszMonth}月.tsv",
+            f"0005_PJサマリ_step0001_単月_損益計算書_{iYear}年{pszMonth}月.tsv",
+        ),
+        (
+            f"0004_PJサマリ_step0001_累計_損益計算書_{iYear}年{pszMonth}月.tsv",
+            f"0005_PJサマリ_step0001_累計_損益計算書_{iYear}年{pszMonth}月.tsv",
+        ),
+        (
+            f"0004_PJサマリ_step0002_単月_損益計算書_{iYear}年{pszMonth}月.tsv",
+            f"0005_PJサマリ_step0002_単月_損益計算書_{iYear}年{pszMonth}月.tsv",
+        ),
+        (
+            f"0004_PJサマリ_step0002_累計_損益計算書_{iYear}年{pszMonth}月.tsv",
+            f"0005_PJサマリ_step0002_累計_損益計算書_{iYear}年{pszMonth}月.tsv",
+        ),
+        (
+            f"0004_PJサマリ_step0003_単月_損益計算書_{iYear}年{pszMonth}月.tsv",
+            f"0005_PJサマリ_step0003_単月_損益計算書_{iYear}年{pszMonth}月.tsv",
+        ),
+        (
+            f"0004_PJサマリ_step0003_累計_損益計算書_{iYear}年{pszMonth}月.tsv",
+            f"0005_PJサマリ_step0003_累計_損益計算書_{iYear}年{pszMonth}月.tsv",
+        ),
+        (
+            f"0004_PJサマリ_step0004_単月_損益計算書_{iYear}年{pszMonth}月.tsv",
+            f"0005_PJサマリ_step0005_単月_損益計算書_{iYear}年{pszMonth}月.tsv",
+        ),
+        (
+            f"0004_PJサマリ_step0004_累計_損益計算書_{iYear}年{pszMonth}月.tsv",
+            f"0005_PJサマリ_step0005_累計_損益計算書_{iYear}年{pszMonth}月.tsv",
+        ),
+        (
+            f"0004_PJサマリ_step0005_単・累_損益計算書_{iYear}年{pszMonth}月.tsv",
+            f"0005_PJサマリ_step0005_単・累_損益計算書_{iYear}年{pszMonth}月.tsv",
+        ),
+        (
+            f"0004_PJサマリ_step0006_単・累_損益計算書_{iYear}年{pszMonth}月.tsv",
+            f"0005_PJサマリ_step0006_単・累_損益計算書_{iYear}年{pszMonth}月.tsv",
+        ),
+    ]
+    for pszSourceName, pszDestinationName in objCopyPairs:
+        objSourcePath: Path = objBaseDirectoryPath / pszSourceName
+        objDestinationPath: Path = objBaseDirectoryPath / pszDestinationName
+        if objSourcePath.exists():
+            shutil.copyfile(objSourcePath, objDestinationPath)
+
+
 def get_target_year_month_from_filename(pszInputFilePath: str) -> Tuple[int, int]:
     pszBaseName: str = os.path.basename(pszInputFilePath)
     objMatch: re.Match[str] | None = re.search(r"(\d{2})\.(\d{1,2})\.csv$", pszBaseName)
@@ -4250,6 +4301,8 @@ def process_single_input(pszInputManhourCsvPath: str) -> int:
     pszRawDataTsvPath: str = str(objBaseDirectoryPath / "Raw_Data.tsv")
 
     # With_Salary.tsv の処理は削除
+
+    copy_pj_summary_0005_files(objBaseDirectoryPath, iFileYear, iFileMonth)
 
     print("OK: created files")
     for objTsvPath in sorted(objBaseDirectoryPath.glob("*.tsv")):
