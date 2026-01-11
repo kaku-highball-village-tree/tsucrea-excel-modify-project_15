@@ -128,6 +128,8 @@ def extract_project_key(pszProjectName: str) -> Optional[str]:
     pszText: str = (pszProjectName or "").strip()
     if pszText == "":
         return None
+    if re.match(r"^C\d{3}_", pszText):
+        return None
 
     iUnderscoreIndex: int = pszText.find("_")
     if iUnderscoreIndex <= 0:
