@@ -74,11 +74,11 @@ def copy_pj_summary_0005_files(objBaseDirectoryPath: Path, iYear: int, iMonth: i
         ),
         (
             f"0004_PJサマリ_step0004_単月_損益計算書_{iYear}年{pszMonth}月.tsv",
-            f"0005_PJサマリ_step0005_単月_損益計算書_{iYear}年{pszMonth}月.tsv",
+            f"0005_PJサマリ_step0004_単月_損益計算書_{iYear}年{pszMonth}月.tsv",
         ),
         (
             f"0004_PJサマリ_step0004_累計_損益計算書_{iYear}年{pszMonth}月.tsv",
-            f"0005_PJサマリ_step0005_累計_損益計算書_{iYear}年{pszMonth}月.tsv",
+            f"0005_PJサマリ_step0004_累計_損益計算書_{iYear}年{pszMonth}月.tsv",
         ),
         (
             f"0004_PJサマリ_step0005_単・累_損益計算書_{iYear}年{pszMonth}月.tsv",
