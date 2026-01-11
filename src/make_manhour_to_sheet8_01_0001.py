@@ -4226,7 +4226,7 @@ def process_single_input(pszInputManhourCsvPath: str) -> int:
                         pszLineContent = pszLineContent[:-1]
                     objStep0008File.write(pszLineContent + "\n")
 
-        if objOrgTableStep0008Path != objOrgTableTsvPath:
+        if objOrgTableStep0008Path.exists() and objOrgTableStep0008Path != objOrgTableTsvPath:
             shutil.copyfile(objOrgTableStep0008Path, objOrgTableTsvPath)
 
     # Staff_List.tsv の処理は削除

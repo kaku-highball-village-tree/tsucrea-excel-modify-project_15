@@ -1962,6 +1962,21 @@ def build_step0004_rows_for_summary(objRows: List[List[str]]) -> List[List[str]]
     return objOutputRows
 
 
+def build_step0005_rows_for_summary(
+    objSingleRows: List[List[str]],
+    objCumulativeRows: List[List[str]],
+) -> List[List[str]]:
+    iMaxRows: int = max(len(objSingleRows), len(objCumulativeRows))
+    objOutputRows: List[List[str]] = []
+    for iRowIndex in range(iMaxRows):
+        objSingleRow: List[str] = objSingleRows[iRowIndex] if iRowIndex < len(objSingleRows) else []
+        objCumulativeRow: List[str] = (
+            objCumulativeRows[iRowIndex] if iRowIndex < len(objCumulativeRows) else []
+        )
+        objOutputRows.append(list(objSingleRow) + [""] + list(objCumulativeRow))
+    return objOutputRows
+
+
 def filter_rows_by_names(
     objRows: List[List[str]],
     objTargetNames: List[str],
@@ -2534,6 +2549,15 @@ def create_pj_summary(
     objCumulativeStep0004Rows = build_step0004_rows_for_summary(objCumulativeStep0003Rows)
     write_tsv_rows(pszSingleStep0004Path, objSingleStep0004Rows)
     write_tsv_rows(pszCumulativeStep0004Path, objCumulativeStep0004Rows)
+    pszStep0005Path: str = os.path.join(
+        pszDirectory,
+        f"0004_PJサマリ_step0005_単・累_損益計算書_{iEndYear}年{pszEndMonth}月.tsv",
+    )
+    objStep0005Rows = build_step0005_rows_for_summary(
+        objSingleStep0004Rows,
+        objCumulativeStep0004Rows,
+    )
+    write_tsv_rows(pszStep0005Path, objStep0005Rows)
 
     objSingleOutputRows: List[List[str]] = []
     for objRow in objSingleRows:
